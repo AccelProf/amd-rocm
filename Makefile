@@ -1,0 +1,53 @@
+# Compiler
+HIPCC = hipcc
+CXX = g++
+
+# Directories
+SRC_DIR = src
+BUILD_DIR = build
+LIB_DIR = $(BUILD_DIR)/lib
+BIN_DIR = $(BUILD_DIR)/bin
+OBJ_DIR = $(BUILD_DIR)/obj
+
+# Source files
+SOURCES = $(notdir $(wildcard $(SRC_DIR)/*.cpp $(SRC_DIR)/*/*.cpp))
+OBJECTS = $(addprefix $(OBJ_DIR)/, $(patsubst %.cpp, %.o, $(SOURCES)))
+
+# Include directories
+INCLUDE_FLAGS = -I$(SRC_DIR) -Icommon
+
+# Linker flags
+LIBS = -lrocprofiler-sdk -lrocprofiler-sdk-roctx -lpthread
+LDFLAGS = -L/opt/rocm/lib -Wl,-rpath,/opt/rocm/lib $(LIBS)
+
+# Compiler flags
+CXXFLAGS = -std=c++17 -fPIC -Wall
+HIPFLAGS = -std=c++17 -fPIC -Wall
+
+# Targets
+all: dirs rocm_api_client
+
+rocm_api_client: $(BIN_DIR)/rocm_api_client $(LIB_DIR)/librocm_api_client.so
+
+dirs:
+	mkdir -p $(BUILD_DIR) $(LIB_DIR) $(BIN_DIR) $(OBJ_DIR)
+
+# Build shared library
+$(LIB_DIR)/librocm_api_client.so: $(OBJ_DIR)/rocm_api_client.o
+	$(HIPCC) -shared -o $@ $^ $(LDFLAGS)
+
+# Build main application
+$(BIN_DIR)/rocm_api_client: $(OBJECTS) $(LIB_DIR)/librocm_api_client.so
+	$(HIPCC) -o $@ $(OBJECTS) $(LDFLAGS) -L$(LIB_DIR) -lrocm_api_client
+
+# Compile source files
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
+	$(HIPCC) $(HIPFLAGS) $(INCLUDE_FLAGS) -c $< -o $@
+
+# Run tests
+test: all
+	LD_LIBRARY_PATH=$(LIB_DIR):$$LD_LIBRARY_PATH $(BIN_DIR)/rocm_api_client
+
+# Clean build
+clean:
+	rm -rf $(BUILD_DIR)
