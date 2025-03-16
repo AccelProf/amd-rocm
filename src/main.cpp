@@ -1,4 +1,4 @@
-#include "rocm_api_client.hpp"
+#include "rocm_callback.hpp"
 
 #include <hip/hip_runtime.h>
 #include <rocprofiler-sdk-roctx/roctx.h>
@@ -52,8 +52,8 @@ run(int rank, int tid, hipStream_t stream, int argc, char** argv);
 int
 main(int argc, char** argv)
 {
-    rocm_api_client::setup();  // currently does nothing
-    // rocm_api_client::start(); // currently will fail
+    rocm_callback::setup();  // currently does nothing
+    // rocm_callback::start(); // currently will fail
 
     auto range_id = roctxRangeStart("main");
 
@@ -124,8 +124,8 @@ main(int argc, char** argv)
 
     roctxRangeStop(range_id);
 
-    rocm_api_client::stop();
-    rocm_api_client::shutdown();
+    rocm_callback::stop();
+    rocm_callback::shutdown();
 
     return 0;
 }
