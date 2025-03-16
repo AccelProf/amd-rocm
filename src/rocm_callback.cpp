@@ -10,7 +10,7 @@
  * @brief Example rocprofiler client (tool)
  */
 
-#include "rocm_api_client.hpp"
+#include "rocm_callback.hpp"
 
 #include <rocprofiler-sdk/context.h>
 #include <rocprofiler-sdk/fwd.h>
@@ -40,7 +40,7 @@
 #include <string_view>
 #include <unordered_set>
 #include <vector>
-namespace rocm_api_client
+namespace rocm_callback
 {
 namespace
 {
@@ -293,7 +293,7 @@ stop()
         ROCPROFILER_CALL(rocprofiler_stop_context(client_ctx), "rocprofiler context stop failed");
     }
 }
-}  // namespace rocm_api_client
+}  // namespace rocm_callback
 
 extern "C" rocprofiler_tool_configure_result_t*
 rocprofiler_configure(uint32_t                 version,
@@ -305,7 +305,7 @@ rocprofiler_configure(uint32_t                 version,
     id->name = "ExampleTool";
 
     // store client info
-    rocm_api_client::client_id = id;
+    rocm_callback::client_id = id;
 
     // compute major/minor/patch version info
     uint32_t major = version / 10000;
@@ -333,17 +333,17 @@ rocprofiler_configure(uint32_t                 version,
     }
 
     // data passed around all the callbacks
-    auto* client_tool_data = new std::vector<rocm_api_client::source_location>{};
+    auto* client_tool_data = new std::vector<rocm_callback::source_location>{};
 
     // add first entry
     client_tool_data->emplace_back(
-        rocm_api_client::source_location{__FUNCTION__, __FILE__, __LINE__, info.str()});
+        rocm_callback::source_location{__FUNCTION__, __FILE__, __LINE__, info.str()});
 
     // create configure data
     static auto cfg =
         rocprofiler_tool_configure_result_t{sizeof(rocprofiler_tool_configure_result_t),
-                                            &rocm_api_client::tool_init,
-                                            &rocm_api_client::tool_fini,
+                                            &rocm_callback::tool_init,
+                                            &rocm_callback::tool_fini,
                                             static_cast<void*>(client_tool_data)};
 
     // return pointer to configure data

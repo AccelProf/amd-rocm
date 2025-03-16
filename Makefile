@@ -25,20 +25,20 @@ CXXFLAGS = -std=c++17 -fPIC -Wall
 HIPFLAGS = -std=c++17 -fPIC -Wall
 
 # Targets
-all: dirs rocm_api_client
+all: dirs rocm_callback
 
-rocm_api_client: $(BIN_DIR)/rocm_api_client $(LIB_DIR)/librocm_api_client.so
+rocm_callback: $(BIN_DIR)/rocm_callback $(LIB_DIR)/librocm_callback.so
 
 dirs:
 	mkdir -p $(BUILD_DIR) $(LIB_DIR) $(BIN_DIR) $(OBJ_DIR)
 
 # Build shared library
-$(LIB_DIR)/librocm_api_client.so: $(OBJ_DIR)/rocm_api_client.o
+$(LIB_DIR)/librocm_callback.so: $(OBJ_DIR)/rocm_callback.o
 	$(HIPCC) -shared -o $@ $^ $(LDFLAGS)
 
 # Build main application
-$(BIN_DIR)/rocm_api_client: $(OBJECTS) $(LIB_DIR)/librocm_api_client.so
-	$(HIPCC) -o $@ $(OBJECTS) $(LDFLAGS) -L$(LIB_DIR) -lrocm_api_client
+$(BIN_DIR)/rocm_callback: $(OBJECTS) $(LIB_DIR)/librocm_callback.so
+	$(HIPCC) -o $@ $(OBJECTS) $(LDFLAGS) -L$(LIB_DIR) -lrocm_callback
 
 # Compile source files
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
@@ -46,7 +46,7 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 
 # Run tests
 test: all
-	LD_LIBRARY_PATH=$(LIB_DIR):$$LD_LIBRARY_PATH $(BIN_DIR)/rocm_api_client
+	LD_LIBRARY_PATH=$(LIB_DIR):$$LD_LIBRARY_PATH $(BIN_DIR)/rocm_callback
 
 # Clean build
 clean:

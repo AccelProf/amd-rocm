@@ -6,7 +6,7 @@
 #    define CLIENT_API
 #endif
 
-namespace rocm_api_client
+namespace rocm_callback
 {
 void
 setup() CLIENT_API;
@@ -19,4 +19,4 @@ start() CLIENT_API;
 
 void
 stop() CLIENT_API;
-}  // namespace rocm_api_client
+}  // namespace rocm_callback
