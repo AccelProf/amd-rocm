@@ -93,6 +93,144 @@ tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
     else
         dt = (now - user_data->value);
 
+    if (record.kind == ROCPROFILER_CALLBACK_TRACING_HIP_RUNTIME_API) {
+        if (record.operation == ROCPROFILER_HIP_RUNTIME_API_ID_hipMalloc) {
+            void* raw_ptr = nullptr;
+            uint64_t size = 0;
+
+            auto cb = [](rocprofiler_callback_tracing_kind_t,
+                        rocprofiler_tracing_operation_t,
+                        uint32_t          arg_num,
+                        const void* const arg_value_addr,
+                        int32_t,
+                        const char*       arg_type,
+                        const char*       arg_name,
+                        const char*,
+                        int32_t,
+                        void*             cb_data) -> int {
+                auto* pair = static_cast<std::pair<void**, uint64_t*>*>(cb_data);
+
+                if (std::string(arg_name) == "ptr") {
+                    *pair->first = *static_cast<void* const*>(arg_value_addr);
+                } else if (std::string(arg_name) == "size") {
+                    *pair->second = *static_cast<const uint64_t*>(arg_value_addr);
+                }
+                return 0;
+            };
+
+            std::pair<void**, uint64_t*> out{&raw_ptr, &size};
+
+            ROCPROFILER_CALL(
+                rocprofiler_iterate_callback_tracing_kind_operation_args(record, cb, /*max_deref=*/1, &out),
+                "failed to iterate hipMalloc arguments");
+
+            // std::cerr << "hipMalloc: ptr=" << raw_ptr << ", size=" << size << "\n";
+            // yosemite_malloc_callback((uint64_t)raw_ptr, size, 0);
+        }
+        // memory free
+        else if (record.operation == ROCPROFILER_HIP_RUNTIME_API_ID_hipFree) {
+            void* ptr = nullptr;
+
+            auto cb = [](rocprofiler_callback_tracing_kind_t,
+                        rocprofiler_tracing_operation_t,
+                        uint32_t,
+                        const void* const arg_value_addr,
+                        int32_t,
+                        const char*,
+                        const char* arg_name,
+                        const char*,
+                        int32_t,
+                        void* cb_data) -> int {
+                if (std::string(arg_name) == "ptr") {
+                    *static_cast<void**>(cb_data) = *static_cast<void* const*>(arg_value_addr);
+                }
+                return 0;
+            };
+
+            ROCPROFILER_CALL(
+                rocprofiler_iterate_callback_tracing_kind_operation_args(record, cb, 1, &ptr),
+                "failed to iterate hipFree arguments");
+
+            // std::cerr << "hipFree: ptr=" << ptr << "\n";
+            // yosemite_free_callback((uint64_t)ptr, 0, 0);
+        } else if (record.operation == ROCPROFILER_HIP_RUNTIME_API_ID_hipMemcpy) {
+            void* dst = nullptr;
+            const void* src = nullptr;
+            size_t size = 0;
+
+            struct {
+                void** dst;
+                const void** src;
+                size_t* size;
+            } out{&dst, &src, &size};
+
+            auto cb = [](rocprofiler_callback_tracing_kind_t,
+                        rocprofiler_tracing_operation_t,
+                        uint32_t,
+                        const void* const arg_value_addr,
+                        int32_t,
+                        const char*,
+                        const char* arg_name,
+                        const char*,
+                        int32_t,
+                        void* cb_data) -> int {
+                auto* p = static_cast<decltype(out)*>(cb_data);
+                if (std::string(arg_name) == "dst") {
+                    *p->dst = *static_cast<void* const*>(arg_value_addr);
+                } else if (std::string(arg_name) == "src") {
+                    *p->src = *static_cast<void* const*>(arg_value_addr);
+                } else if (std::string(arg_name) == "size") {
+                    *p->size = *static_cast<const size_t*>(arg_value_addr);
+                }
+                return 0;
+            };
+
+            ROCPROFILER_CALL(
+                rocprofiler_iterate_callback_tracing_kind_operation_args(record, cb, 1, &out),
+                "failed to iterate hipMemcpy arguments");
+
+            // std::cerr << "hipMemcpy: dst=" << dst << ", src=" << src << ", size=" << size << "\n";
+
+        } else if (record.operation == ROCPROFILER_HIP_RUNTIME_API_ID_hipMemset) {
+            void* ptr = nullptr;
+            int value = 0;
+            size_t size = 0;
+
+            struct {
+                void** ptr;
+                int* value;
+                size_t* size;
+            } out{&ptr, &value, &size};
+
+            auto cb = [](rocprofiler_callback_tracing_kind_t,
+                        rocprofiler_tracing_operation_t,
+                        uint32_t,
+                        const void* const arg_value_addr,
+                        int32_t,
+                        const char*,
+                        const char* arg_name,
+                        const char*,
+                        int32_t,
+                        void* cb_data) -> int {
+                auto* p = static_cast<decltype(out)*>(cb_data);
+                if (std::string(arg_name) == "dst") {
+                    *p->ptr = *static_cast<void* const*>(arg_value_addr);
+                } else if (std::string(arg_name) == "value") {
+                    *p->value = *static_cast<const int*>(arg_value_addr);
+                } else if (std::string(arg_name) == "size") {
+                    *p->size = *static_cast<const size_t*>(arg_value_addr);
+                }
+                return 0;
+            };
+
+            ROCPROFILER_CALL(
+                rocprofiler_iterate_callback_tracing_kind_operation_args(record, cb, 1, &out),
+                "failed to iterate hipMemset arguments");
+
+            // std::cerr << "hipMemset: ptr=" << ptr << ", value=" << value << ", size=" << size << "\n";
+        }
+    }
+
     auto info = std::stringstream{};
     info << std::left << "tid=" << record.thread_id << ", cid=" << std::setw(3)
          << record.correlation_id.internal << ", kind=" << record.kind
