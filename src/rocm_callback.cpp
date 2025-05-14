@@ -277,11 +277,11 @@ tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
                 "failed to iterate hipLaunchKernel arguments");
 
             // std::cerr << "hipLaunchKernel: func=" << func_ptr
-            //         << ", grid=(" << grid_dim.x << "," << grid_dim.y << "," << grid_dim.z << ")"
-            //         << ", block=(" << block_dim.x << "," << block_dim.y << "," << block_dim.z << ")"
-            //         << ", sharedMem=" << shared_mem
-            //         << ", stream=" << stream << "\n";
-            //     }
+            //     << ", grid=(" << grid_dim.x << "," << grid_dim.y << "," << grid_dim.z << ")"
+            //     << ", block=(" << block_dim.x << "," << block_dim.y << "," << block_dim.z << ")"
+            //     << ", sharedMem=" << shared_mem
+            //     << ", stream=" << stream << "\n";
+
             std::stringstream ss;
             ss << func_ptr;
             yosemite_kernel_start_callback(ss.str());
