@@ -29,8 +29,19 @@ all: dirs rocm_callback
 
 rocm_callback: $(BIN_DIR)/rocm_callback $(LIB_DIR)/librocm_callback.so
 
-dirs:
-	mkdir -p $(BUILD_DIR) $(LIB_DIR) $(BIN_DIR) $(OBJ_DIR)
+dirs: $(BUILD_DIR) $(LIB_DIR) $(BIN_DIR) $(OBJ_DIR)
+
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
+
+$(LIB_DIR):
+	mkdir -p $(LIB_DIR)
+
+$(BIN_DIR):
+	mkdir -p $(BIN_DIR)
+
+$(OBJ_DIR):
+	mkdir -p $(OBJ_DIR)
 
 # Build shared library
 $(LIB_DIR)/librocm_callback.so: $(OBJ_DIR)/rocm_callback.o
