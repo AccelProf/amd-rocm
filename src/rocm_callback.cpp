@@ -228,7 +228,56 @@ tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
                 "failed to iterate hipMemset arguments");
 
             // std::cerr << "hipMemset: ptr=" << ptr << ", value=" << value << ", size=" << size << "\n";
-        }
+        } else if (record.operation == ROCPROFILER_HIP_RUNTIME_API_ID_hipLaunchKernel) {
+            const void* func_ptr = nullptr;
+            dim3 grid_dim = {};
+            dim3 block_dim = {};
+            void* stream = nullptr;
+            uint32_t shared_mem = 0;
+
+            struct {
+                const void** func_ptr;
+                dim3* grid_dim;
+                dim3* block_dim;
+                uint32_t* shared_mem;
+                void** stream;
+            } out{&func_ptr, &grid_dim, &block_dim, &shared_mem, &stream};
+
+            auto cb = [](rocprofiler_callback_tracing_kind_t,
+                        rocprofiler_tracing_operation_t,
+                        uint32_t,
+                        const void* const arg_value_addr,
+                        int32_t,
+                        const char*,
+                        const char* arg_name,
+                        const char*,
+                        int32_t,
+                        void* cb_data) -> int {
+                auto* p = static_cast<decltype(out)*>(cb_data);
+                if (std::string(arg_name) == "func") {
+                    *p->func_ptr = *static_cast<const void* const*>(arg_value_addr);
+                } else if (std::string(arg_name) == "gridDim") {
+                    *p->grid_dim = *static_cast<const dim3*>(arg_value_addr);
+                } else if (std::string(arg_name) == "blockDim") {
+                    *p->block_dim = *static_cast<const dim3*>(arg_value_addr);
+                } else if (std::string(arg_name) == "sharedMemBytes") {
+                    *p->shared_mem = *static_cast<const uint32_t*>(arg_value_addr);
+                } else if (std::string(arg_name) == "stream") {
+                    *p->stream = *static_cast<void* const*>(arg_value_addr);
+                }
+                return 0;
+            };
+
+            ROCPROFILER_CALL(
+                rocprofiler_iterate_callback_tracing_kind_operation_args(record, cb, 1, &out),
+                "failed to iterate hipLaunchKernel arguments");
+
+            std::cerr << "hipLaunchKernel: func=" << func_ptr
+                    << ", grid=(" << grid_dim.x << "," << grid_dim.y << "," << grid_dim.z << ")"
+                    << ", block=(" << block_dim.x << "," << block_dim.y << "," << block_dim.z << ")"
+                    << ", sharedMem=" << shared_mem
+                    << ", stream=" << stream << "\n";
+                }
     }
 
     auto info = std::stringstream{};
