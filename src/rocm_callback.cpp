@@ -43,6 +43,13 @@
 
 #include "sanalyzer.h"
 
+
+#if AMDROCM_VERBOSE
+#define PRINT(...) do { fprintf(stdout, __VA_ARGS__); fflush(stdout); } while (0)
+#else
+#define PRINT(...)
+#endif
+
 namespace rocm_callback
 {
 namespace
@@ -128,6 +135,7 @@ tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
                 "failed to iterate hipMalloc arguments");
 
             // std::cerr << "hipMalloc: ptr=" << raw_ptr << ", size=" << size << "\n";
+            PRINT("[AMDROCM INFO] hipMalloc: ptr=%p, size=%zu\n", raw_ptr, size);
             yosemite_alloc_callback((uint64_t)raw_ptr, size, 0);
         }
         // memory free
@@ -155,6 +163,7 @@ tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
                 "failed to iterate hipFree arguments");
 
             // std::cerr << "hipFree: ptr=" << ptr << "\n";
+            PRINT("[AMDROCM INFO] hipFree: ptr=%p\n", ptr);
             yosemite_free_callback((uint64_t)ptr, 0, 0);
         } else if (record.operation == ROCPROFILER_HIP_RUNTIME_API_ID_hipMemcpy) {
             void* dst = nullptr;
@@ -193,6 +202,7 @@ tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
                 "failed to iterate hipMemcpy arguments");
 
             // std::cerr << "hipMemcpy: dst=" << dst << ", src=" << src << ", size=" << size << "\n";
+            PRINT("[AMDROCM INFO] hipMemcpy: dst=%p, src=%p, size=%zu\n", dst, src, size);
             yosemite_memcpy_callback((uint64_t)dst, (uint64_t)src, size, false, 0);
         } else if (record.operation == ROCPROFILER_HIP_RUNTIME_API_ID_hipMemset) {
             void* ptr = nullptr;
@@ -231,6 +241,7 @@ tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
                 "failed to iterate hipMemset arguments");
 
             // std::cerr << "hipMemset: ptr=" << ptr << ", value=" << value << ", size=" << size << "\n";
+            PRINT("[AMDROCM INFO] hipMemset: ptr=%p, value=%d, size=%zu\n", ptr, value, size);
             yosemite_memset_callback((uint64_t)ptr, size, value, false);
         } else if (record.operation == ROCPROFILER_HIP_RUNTIME_API_ID_hipLaunchKernel) {
             const void* func_ptr = nullptr;
@@ -282,6 +293,8 @@ tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
             //     << ", sharedMem=" << shared_mem
             //     << ", stream=" << stream << "\n";
 
+            PRINT("[AMDROCM INFO] hipLaunchKernel: func=%p, grid=(%d,%d,%d), block=(%d,%d,%d), sharedMem=%d, stream=%p\n",
+                  func_ptr, grid_dim.x, grid_dim.y, grid_dim.z, block_dim.x, block_dim.y, block_dim.z, shared_mem, stream);
             std::stringstream ss;
             ss << func_ptr;
             yosemite_kernel_start_callback(ss.str());
