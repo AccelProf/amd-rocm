@@ -1,3 +1,8 @@
+PROJECT := rocm_callback
+CONFIGS := Makefile.config
+
+include $(CONFIGS)
+
 # Compiler
 HIPCC = hipcc
 CXX = g++
@@ -15,6 +20,10 @@ OBJECTS = $(addprefix $(OBJ_DIR)/, $(patsubst %.cpp, %.o, $(SOURCES)))
 
 # Include directories
 INCLUDE_FLAGS = -I$(SRC_DIR) -Icommon
+
+SANALYZER_INC = -I$(SANALYZER_DIR)/include
+SANALYZER_LDFLAGS = -L$(SANALYZER_DIR)/lib -Wl,-rpath=$(SANALYZER_DIR)/lib
+SANALYZER_LIB = -lsanalyzer
 
 # Linker flags
 LIBS = -lrocprofiler-sdk -lrocprofiler-sdk-roctx -lpthread
@@ -43,17 +52,17 @@ $(BIN_DIR):
 $(OBJ_DIR):
 	mkdir -p $(OBJ_DIR)
 
-# Build shared library
-$(LIB_DIR)/librocm_callback.so: $(OBJ_DIR)/rocm_callback.o
-	$(HIPCC) -shared -o $@ $^ $(LDFLAGS)
-
 # Build main application
-$(BIN_DIR)/rocm_callback: $(OBJECTS) $(LIB_DIR)/librocm_callback.so
-	$(HIPCC) -o $@ $(OBJECTS) $(LDFLAGS) -L$(LIB_DIR) -lrocm_callback
+$(BIN_DIR)/$(PROJECT): $(OBJECTS) $(LIB_DIR)/lib$(PROJECT).so
+	$(HIPCC) -o $@ $(OBJECTS) $(LDFLAGS) -L$(LIB_DIR) -l$(PROJECT) $(SANALYZER_LDFLAGS) $(SANALYZER_LIB)
+
+# Build shared library
+$(LIB_DIR)/lib$(PROJECT).so: $(OBJ_DIR)/$(PROJECT).o
+	$(HIPCC) -shared -o $@ $^ $(LDFLAGS) $(SANALYZER_LDFLAGS) $(SANALYZER_LIB)
 
 # Compile source files
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
-	$(HIPCC) $(HIPFLAGS) $(INCLUDE_FLAGS) -c $< -o $@
+	$(HIPCC) $(HIPFLAGS) $(INCLUDE_FLAGS) $(SANALYZER_INC) -c $< -o $@
 
 # Run tests
 test: all
