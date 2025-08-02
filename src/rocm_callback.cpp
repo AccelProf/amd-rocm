@@ -2,6 +2,7 @@
 #include <rocprofiler-sdk/marker/api_id.h>
 #include <rocprofiler-sdk/registration.h>
 #include <rocprofiler-sdk/rocprofiler.h>
+#include <rocprofiler-sdk/fwd.h>
 #include <hip/hip_runtime.h>
 
 #include <cassert>
@@ -14,8 +15,12 @@
 #include <vector>
 #include <iostream>
 #include <iomanip>
+#include <cxxabi.h>
 
 #include "sanalyzer.h"
+
+#define AMDROCM_VERBOSE 1
+
 #if AMDROCM_VERBOSE
 #define PRINT(...) do { fprintf(stdout, __VA_ARGS__); fflush(stdout); } while (0)
 #else
@@ -75,18 +80,19 @@ void tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
     if (record.phase == ROCPROFILER_CALLBACK_PHASE_ENTER) {
         const char* _operation = nullptr;
         rocprofiler_query_callback_tracing_kind_operation_name(record.kind, record.operation, &_operation, nullptr);
-        PRINT("[ROCMPROF INFO] Event: %s\n", _operation);
+        PRINT("[ROCMPROF INFO] Enter Event: %s\n", _operation);
     }
 
     if (record.phase == ROCPROFILER_CALLBACK_PHASE_EXIT) {
         const char* _operation = nullptr;
         rocprofiler_query_callback_tracing_kind_operation_name(record.kind, record.operation, &_operation, nullptr);
-        PRINT("[ROCMPROF INFO] Event: %s\n", _operation);
+        PRINT("[ROCMPROF INFO] Exit Event: %s\n", _operation);
     }
 
     if (record.operation == ROCPROFILER_HIP_RUNTIME_API_ID_hipMalloc) {
         void* raw_ptr = nullptr;
         uint64_t size = 0;
+        std::pair<void**, uint64_t*> out{&raw_ptr, &size};
         auto cb = [](rocprofiler_callback_tracing_kind_t,
             rocprofiler_tracing_operation_t,
             uint32_t arg_num,
@@ -106,14 +112,13 @@ void tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
 
             return 0;
         };
-        std::pair<void**, uint64_t*> out{&raw_ptr, &size};
+
         ROCPROFILER_CALL(
             rocprofiler_iterate_callback_tracing_kind_operation_args(record, cb, /*max_deref=*/1, &out),
             "failed to iterate hipMalloc arguments");
 
-        // std::cerr << "hipMalloc: ptr=" << raw_ptr << ", size=" << size << "\n";
         PRINT("[ROCMPROF INFO] hipMalloc: ptr=%p, size=%zu\n", raw_ptr, size);
-        yosemite_alloc_callback((uint64_t)raw_ptr, size, 0);
+        // yosemite_alloc_callback((uint64_t)raw_ptr, size, 0);
     } else if (record.operation == ROCPROFILER_HIP_RUNTIME_API_ID_hipFree) {
         void* ptr = nullptr;
         auto cb = [](rocprofiler_callback_tracing_kind_t,
@@ -131,23 +136,25 @@ void tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
             }
             return 0;
         };
+
         ROCPROFILER_CALL(
             rocprofiler_iterate_callback_tracing_kind_operation_args(record, cb, 1, &ptr),
             "failed to iterate hipFree arguments");
 
-        // std::cerr << "hipFree: ptr=" << ptr << "\n";
         PRINT("[ROCMPROF INFO] hipFree: ptr=%p\n", ptr);
-        yosemite_free_callback((uint64_t)ptr, 0, 0);
+        // yosemite_free_callback((uint64_t)ptr, 0, 0);
     } else if (record.operation == ROCPROFILER_HIP_RUNTIME_API_ID_hipMemcpy) {
         void* dst = nullptr;
         const void* src = nullptr;
         size_t size = 0;
+        hipMemcpyKind kind;
         struct memcpy_args {
             void** dst;
             const void** src;
             size_t* size;
+            hipMemcpyKind* kind;
         };
-        memcpy_args out{&dst, &src, &size};
+        memcpy_args out{&dst, &src, &size, &kind};
         auto cb = [](rocprofiler_callback_tracing_kind_t,
                     rocprofiler_tracing_operation_t,
                     uint32_t,
@@ -163,8 +170,10 @@ void tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
                 *p->dst = *static_cast<void* const*>(arg_value_addr);
             } else if (std::string(arg_name) == "src") {
                 *p->src = *static_cast<void* const*>(arg_value_addr);
-            } else if (std::string(arg_name) == "size") {
+            } else if (std::string(arg_name) == "sizeBytes") {
                 *p->size = *static_cast<const size_t*>(arg_value_addr);
+            } else if (std::string(arg_name) == "kind") {
+                *p->kind = *static_cast<const hipMemcpyKind*>(arg_value_addr);
             }
             return 0;
         };
@@ -173,14 +182,12 @@ void tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
             rocprofiler_iterate_callback_tracing_kind_operation_args(record, cb, 1, &out),
             "failed to iterate hipMemcpy arguments");
 
-        // std::cerr << "hipMemcpy: dst=" << dst << ", src=" << src << ", size=" << size << "\n";
-        PRINT("[ROCMPROF INFO] hipMemcpy: dst=%p, src=%p, size=%zu\n", dst, src, size);
-        yosemite_memcpy_callback((uint64_t)dst, (uint64_t)src, size, false, 0);
+        PRINT("[ROCMPROF INFO] hipMemcpy: dst=%p, src=%p, size=%zu, kind=%d\n", dst, src, size, (int)kind);
+        // yosemite_memcpy_callback((uint64_t)dst, (uint64_t)src, size, false, 0);
     } else if (record.operation == ROCPROFILER_HIP_RUNTIME_API_ID_hipMemset) {
         void* ptr = nullptr;
         int value = 0;
         size_t size = 0;
-
         struct memset_args {
             void** ptr;
             int* value;
@@ -203,7 +210,7 @@ void tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
                 *p->ptr = *static_cast<void* const*>(arg_value_addr);
             } else if (std::string(arg_name) == "value") {
                 *p->value = *static_cast<const int*>(arg_value_addr);
-            } else if (std::string(arg_name) == "size") {
+            } else if (std::string(arg_name) == "sizeBytes") {
                 *p->size = *static_cast<const size_t*>(arg_value_addr);
             }
             return 0;
@@ -213,20 +220,18 @@ void tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
             rocprofiler_iterate_callback_tracing_kind_operation_args(record, cb, 1, &out),
             "failed to iterate hipMemset arguments");
 
-        // std::cerr << "hipMemset: ptr=" << ptr << ", value=" << value << ", size=" << size << "\n";
         PRINT("[ROCMPROF INFO] hipMemset: ptr=%p, value=%d, size=%zu\n", ptr, value, size);
-        yosemite_memset_callback((uint64_t)ptr, size, value, false);
+        // yosemite_memset_callback((uint64_t)ptr, size, value, false);
     } else if (record.operation == ROCPROFILER_HIP_RUNTIME_API_ID_hipLaunchKernel) {
         const void* func_ptr = nullptr;
-        dim3 grid_dim = {};
-        dim3 block_dim = {};
-        void* stream = nullptr;
+        rocprofiler_dim3_t grid_dim = {};
+        rocprofiler_dim3_t block_dim = {};
         uint32_t shared_mem = 0;
-
+        void* stream = nullptr;
         struct kernel_args {
             const void** func_ptr;
-            dim3* grid_dim;
-            dim3* block_dim;
+            rocprofiler_dim3_t* grid_dim;
+            rocprofiler_dim3_t* block_dim;
             uint32_t* shared_mem;
             void** stream;
         };
@@ -243,12 +248,12 @@ void tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
                     int32_t,
                     void* cb_data) -> int {
             auto* p = static_cast<kernel_args*>(cb_data);
-            if (std::string(arg_name) == "func") {
+            if (std::string(arg_name) == "function_address") {
                 *p->func_ptr = *static_cast<const void* const*>(arg_value_addr);
-            } else if (std::string(arg_name) == "gridDim") {
-                *p->grid_dim = *static_cast<const dim3*>(arg_value_addr);
-            } else if (std::string(arg_name) == "blockDim") {
-                *p->block_dim = *static_cast<const dim3*>(arg_value_addr);
+            } else if (std::string(arg_name) == "numBlocks") {
+                *p->grid_dim = *static_cast<const rocprofiler_dim3_t*>(arg_value_addr);
+            } else if (std::string(arg_name) == "dimBlocks") {
+                *p->block_dim = *static_cast<const rocprofiler_dim3_t*>(arg_value_addr);
             } else if (std::string(arg_name) == "sharedMemBytes") {
                 *p->shared_mem = *static_cast<const uint32_t*>(arg_value_addr);
             } else if (std::string(arg_name) == "stream") {
@@ -261,17 +266,11 @@ void tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
             rocprofiler_iterate_callback_tracing_kind_operation_args(record, cb, 1, &out),
             "failed to iterate hipLaunchKernel arguments");
 
-        // std::cerr << "hipLaunchKernel: func=" << func_ptr
-        //     << ", grid=(" << grid_dim.x << "," << grid_dim.y << "," << grid_dim.z << ")"
-        //     << ", block=(" << block_dim.x << "," << block_dim.y << "," << block_dim.z << ")"
-        //     << ", sharedMem=" << shared_mem
-        //     << ", stream=" << stream << "\n";
-
         PRINT("[ROCMPROF INFO] hipLaunchKernel: func=%p, grid=(%d,%d,%d), block=(%d,%d,%d), sharedMem=%d, stream=%p\n",
             func_ptr, grid_dim.x, grid_dim.y, grid_dim.z, block_dim.x, block_dim.y, block_dim.z, shared_mem, stream);
         std::stringstream ss;
         ss << func_ptr;
-        yosemite_kernel_start_callback(ss.str());
+        // yosemite_kernel_start_callback(ss.str());
     }
 
     auto info = std::stringstream{};
@@ -292,12 +291,16 @@ void tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
         auto& dss = *static_cast<std::stringstream*>(cb_data);
         dss << ((arg_num == 0) ? "(" : ", ");
         dss << arg_num << ": " << arg_name << "=" << arg_value_str;
+        if (arg_type) {
+            char* _arg_type = abi::__cxa_demangle(arg_type, nullptr, nullptr, nullptr);
+            dss << "(" << _arg_type << ")";
+            free(_arg_type);
+        }
         (void) arg_value_addr;
         (void) arg_type;
         (void) indirection_count;
         (void) dereference_count;
 
-        PRINT("[ROCMPROF INFO] Event: %s\n", dss.str().c_str());
         return 0;
     };
 
@@ -310,7 +313,7 @@ void tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
     auto info_data_str = info_data.str();
     if(!info_data_str.empty()) info << " " << info_data_str << ")";
 
-    PRINT("%s\n", info.str().c_str());
+    PRINT("[ROCMPROF INFO] %s\n", info.str().c_str());
 }
 
 void tool_control_init(rocprofiler_context_id_t& primary_ctx)
