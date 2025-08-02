@@ -18,7 +18,7 @@ SOURCES = $(notdir $(wildcard $(SRC_DIR)/*.cpp $(SRC_DIR)/*/*.cpp))
 OBJECTS = $(addprefix $(OBJ_DIR)/, $(patsubst %.cpp, %.o, $(SOURCES)))
 
 # Include directories
-INCLUDE_FLAGS = -I$(SRC_DIR)
+INCLUDE_FLAGS = -I/opt/rocm/include
 
 SANALYZER_INC = -I$(SANALYZER_DIR)/include
 SANALYZER_LDFLAGS = -L$(SANALYZER_DIR)/lib -Wl,-rpath=$(SANALYZER_DIR)/lib

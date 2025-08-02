@@ -15,7 +15,8 @@
 #include <vector>
 #include <iostream>
 #include <iomanip>
-#include <cxxabi.h>
+#include <cxxabi.h> // for type demangling
+#include <dlfcn.h> // for kernel symbol lookup
 
 #include "sanalyzer.h"
 
@@ -77,19 +78,8 @@ void tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
 {
     if (record.kind != ROCPROFILER_CALLBACK_TRACING_HIP_RUNTIME_API) return;
 
-    if (record.phase == ROCPROFILER_CALLBACK_PHASE_ENTER) {
-        const char* _operation = nullptr;
-        rocprofiler_query_callback_tracing_kind_operation_name(record.kind, record.operation, &_operation, nullptr);
-        PRINT("[ROCMPROF INFO] Enter Event: %s\n", _operation);
-    }
-
-    if (record.phase == ROCPROFILER_CALLBACK_PHASE_EXIT) {
-        const char* _operation = nullptr;
-        rocprofiler_query_callback_tracing_kind_operation_name(record.kind, record.operation, &_operation, nullptr);
-        PRINT("[ROCMPROF INFO] Exit Event: %s\n", _operation);
-    }
-
-    if (record.operation == ROCPROFILER_HIP_RUNTIME_API_ID_hipMalloc) {
+    if (record.operation == ROCPROFILER_HIP_RUNTIME_API_ID_hipMalloc
+            && record.phase == ROCPROFILER_CALLBACK_PHASE_ENTER) {
         void* raw_ptr = nullptr;
         uint64_t size = 0;
         std::pair<void**, uint64_t*> out{&raw_ptr, &size};
@@ -118,8 +108,9 @@ void tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
             "failed to iterate hipMalloc arguments");
 
         PRINT("[ROCMPROF INFO] hipMalloc: ptr=%p, size=%zu\n", raw_ptr, size);
-        // yosemite_alloc_callback((uint64_t)raw_ptr, size, 0);
-    } else if (record.operation == ROCPROFILER_HIP_RUNTIME_API_ID_hipFree) {
+        yosemite_alloc_callback((uint64_t)raw_ptr, size, 0);
+    } else if (record.operation == ROCPROFILER_HIP_RUNTIME_API_ID_hipFree
+                && record.phase == ROCPROFILER_CALLBACK_PHASE_ENTER) {
         void* ptr = nullptr;
         auto cb = [](rocprofiler_callback_tracing_kind_t,
                     rocprofiler_tracing_operation_t,
@@ -142,8 +133,9 @@ void tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
             "failed to iterate hipFree arguments");
 
         PRINT("[ROCMPROF INFO] hipFree: ptr=%p\n", ptr);
-        // yosemite_free_callback((uint64_t)ptr, 0, 0);
-    } else if (record.operation == ROCPROFILER_HIP_RUNTIME_API_ID_hipMemcpy) {
+        yosemite_free_callback((uint64_t)ptr, 0, 0);
+    } else if (record.operation == ROCPROFILER_HIP_RUNTIME_API_ID_hipMemcpy
+                && record.phase == ROCPROFILER_CALLBACK_PHASE_ENTER) {
         void* dst = nullptr;
         const void* src = nullptr;
         size_t size = 0;
@@ -183,8 +175,9 @@ void tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
             "failed to iterate hipMemcpy arguments");
 
         PRINT("[ROCMPROF INFO] hipMemcpy: dst=%p, src=%p, size=%zu, kind=%d\n", dst, src, size, (int)kind);
-        // yosemite_memcpy_callback((uint64_t)dst, (uint64_t)src, size, false, 0);
-    } else if (record.operation == ROCPROFILER_HIP_RUNTIME_API_ID_hipMemset) {
+        yosemite_memcpy_callback((uint64_t)dst, (uint64_t)src, size, false, (uint32_t)kind);
+    } else if (record.operation == ROCPROFILER_HIP_RUNTIME_API_ID_hipMemset
+                && record.phase == ROCPROFILER_CALLBACK_PHASE_ENTER) {
         void* ptr = nullptr;
         int value = 0;
         size_t size = 0;
@@ -221,8 +214,9 @@ void tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
             "failed to iterate hipMemset arguments");
 
         PRINT("[ROCMPROF INFO] hipMemset: ptr=%p, value=%d, size=%zu\n", ptr, value, size);
-        // yosemite_memset_callback((uint64_t)ptr, size, value, false);
-    } else if (record.operation == ROCPROFILER_HIP_RUNTIME_API_ID_hipLaunchKernel) {
+        yosemite_memset_callback((uint64_t)ptr, (uint32_t)size, (int)value, false);
+    } else if (record.operation == ROCPROFILER_HIP_RUNTIME_API_ID_hipLaunchKernel
+                && record.phase == ROCPROFILER_CALLBACK_PHASE_ENTER) {
         const void* func_ptr = nullptr;
         rocprofiler_dim3_t grid_dim = {};
         rocprofiler_dim3_t block_dim = {};
@@ -269,8 +263,11 @@ void tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
         PRINT("[ROCMPROF INFO] hipLaunchKernel: func=%p, grid=(%d,%d,%d), block=(%d,%d,%d), sharedMem=%d, stream=%p\n",
             func_ptr, grid_dim.x, grid_dim.y, grid_dim.z, block_dim.x, block_dim.y, block_dim.z, shared_mem, stream);
         std::stringstream ss;
-        ss << func_ptr;
-        // yosemite_kernel_start_callback(ss.str());
+        Dl_info info;
+        if (dladdr(func_ptr, &info) != 0) {
+            ss << info.dli_sname;
+        }
+        yosemite_kernel_start_callback(ss.str());
     }
 
     auto info = std::stringstream{};
