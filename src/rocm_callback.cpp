@@ -16,7 +16,6 @@
 #include <iostream>
 #include <iomanip>
 #include <cxxabi.h> // for type demangling
-#include <dlfcn.h> // for kernel symbol lookup
 
 #include "sanalyzer.h"
 
@@ -262,12 +261,11 @@ void tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
 
         PRINT("[ROCMPROF INFO] hipLaunchKernel: func=%p, grid=(%d,%d,%d), block=(%d,%d,%d), sharedMem=%d, stream=%p\n",
             func_ptr, grid_dim.x, grid_dim.y, grid_dim.z, block_dim.x, block_dim.y, block_dim.z, shared_mem, stream);
-        std::stringstream ss;
-        Dl_info info;
-        if (dladdr(func_ptr, &info) != 0) {
-            ss << info.dli_sname;
-        }
-        yosemite_kernel_start_callback(ss.str());
+ 
+        char buffer[64];
+        snprintf(buffer, sizeof(buffer), "%p", func_ptr);
+        std::string func_name(buffer);
+        yosemite_kernel_start_callback("func-" + func_name);
     }
 
     auto info = std::stringstream{};
@@ -399,3 +397,25 @@ extern "C" rocprofiler_tool_configure_result_t* rocprofiler_configure(uint32_t v
     // return pointer to configure data
     return &cfg;
 }
+
+
+void rocm_cleanup(void) {
+    yosemite_terminate();
+}
+
+__attribute__((constructor))
+void initializer(void) {
+    atexit(rocm_cleanup);
+}
+
+__attribute__((destructor))
+void finalizer(void) {
+}
+
+int rocm_profiler_init() {
+    AccelProfOptions_t rocm_options;
+    yosemite_init(rocm_options);
+    return 0;
+}
+
+int __global_initializer__ = rocm_profiler_init();
