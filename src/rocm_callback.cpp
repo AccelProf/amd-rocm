@@ -53,6 +53,7 @@ rocprofiler_client_id_t* client_id = nullptr;
 rocprofiler_client_finalize_t client_fini_func = nullptr;
 rocprofiler_context_id_t client_ctx = {0};
 
+
 void tool_tracing_ctrl_callback(rocprofiler_callback_tracing_record_t record,
                                 rocprofiler_user_data_t*,
                                 void* client_data)
@@ -107,7 +108,7 @@ void tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
             "failed to iterate hipMalloc arguments");
 
         PRINT("[ROCMPROF INFO] hipMalloc: ptr=%p, size=%zu\n", raw_ptr, size);
-        yosemite_alloc_callback((uint64_t)raw_ptr, size, 0);
+        yosemite_alloc_callback((uint64_t)raw_ptr, size, 0, 0 /*device_id*/);
     } else if (record.operation == ROCPROFILER_HIP_RUNTIME_API_ID_hipFree
                 && record.phase == ROCPROFILER_CALLBACK_PHASE_ENTER) {
         void* ptr = nullptr;
@@ -132,7 +133,7 @@ void tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
             "failed to iterate hipFree arguments");
 
         PRINT("[ROCMPROF INFO] hipFree: ptr=%p\n", ptr);
-        yosemite_free_callback((uint64_t)ptr, 0, 0);
+        yosemite_free_callback((uint64_t)ptr, 0, 0, 0 /*device_id*/);
     } else if (record.operation == ROCPROFILER_HIP_RUNTIME_API_ID_hipMemcpy
                 && record.phase == ROCPROFILER_CALLBACK_PHASE_ENTER) {
         void* dst = nullptr;
@@ -174,7 +175,7 @@ void tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
             "failed to iterate hipMemcpy arguments");
 
         PRINT("[ROCMPROF INFO] hipMemcpy: dst=%p, src=%p, size=%zu, kind=%d\n", dst, src, size, (int)kind);
-        yosemite_memcpy_callback((uint64_t)dst, (uint64_t)src, size, false, (uint32_t)kind);
+        yosemite_memcpy_callback((uint64_t)dst, (uint64_t)src, size, false, (uint32_t)kind, 0 /*device_id*/);
     } else if (record.operation == ROCPROFILER_HIP_RUNTIME_API_ID_hipMemset
                 && record.phase == ROCPROFILER_CALLBACK_PHASE_ENTER) {
         void* ptr = nullptr;
@@ -213,7 +214,7 @@ void tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
             "failed to iterate hipMemset arguments");
 
         PRINT("[ROCMPROF INFO] hipMemset: ptr=%p, value=%d, size=%zu\n", ptr, value, size);
-        yosemite_memset_callback((uint64_t)ptr, (uint32_t)size, (int)value, false);
+        yosemite_memset_callback((uint64_t)ptr, (uint32_t)size, (int)value, false, 0 /*device_id*/);
     } else if (record.operation == ROCPROFILER_HIP_RUNTIME_API_ID_hipLaunchKernel
                 && record.phase == ROCPROFILER_CALLBACK_PHASE_ENTER) {
         const void* func_ptr = nullptr;
@@ -265,7 +266,7 @@ void tool_tracing_callback(rocprofiler_callback_tracing_record_t record,
         char buffer[64];
         snprintf(buffer, sizeof(buffer), "%p", func_ptr);
         std::string func_name(buffer);
-        yosemite_kernel_start_callback("func-" + func_name);
+        yosemite_kernel_start_callback("func-" + func_name, 0 /*device_id*/);
     }
 
     auto info = std::stringstream{};
@@ -415,6 +416,7 @@ void finalizer(void) {
 int rocm_profiler_init() {
     AccelProfOptions_t rocm_options;
     yosemite_init(rocm_options);
+
     return 0;
 }
 
