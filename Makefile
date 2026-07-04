@@ -29,8 +29,32 @@ LIBS = -lrocprofiler-sdk -lrocprofiler-sdk-roctx -lpthread
 LDFLAGS = -L/opt/rocm/lib -Wl,-rpath,/opt/rocm/lib $(LIBS)
 
 # Compiler flags
-CXXFLAGS = -std=c++17 -fPIC -Wall
+CXX_FLAGS =
 HIPFLAGS = -std=c++17 -fPIC -Wall
+
+ifeq ($(DEBUG), 1)
+	CXX_FLAGS += -g
+endif
+
+OPT_LVL ?= 3
+ifeq ($(OPT_LVL), 0)
+	CXX_FLAGS += -O0
+else ifeq ($(OPT_LVL), 1)
+	CXX_FLAGS += -O1 -march=native
+else ifeq ($(OPT_LVL), 2)
+	CXX_FLAGS += -O2 -march=native
+else ifeq ($(OPT_LVL), 3)
+	CXX_FLAGS += -O3 -march=native
+else
+    $(error Invalid OPT_LVL=$(OPT_LVL), expected 0,1,2,3)
+endif
+
+ifneq ($(OPT_LVL),0)
+    CXX_FLAGS += -march=native
+endif
+
+HIPFLAGS += $(CXX_FLAGS)
+
 
 # Targets
 all: dirs rocm_callback
