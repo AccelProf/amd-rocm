@@ -1,3 +1,10 @@
+> [!IMPORTANT]
+> **📦 This code has moved to the [AccelProf](https://github.com/AccelProf/AccelProf) main repository.**
+> Now at [`backends/amd-rocm/`](https://github.com/AccelProf/AccelProf/tree/main/backends/amd-rocm).
+> This repository is archived for historical reference.
+> All development continues there.
+
+
 AMD Development Setup
 
 ```shell
